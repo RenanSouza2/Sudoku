@@ -340,7 +340,6 @@ int sudoku_backtrack(sudoku *sdk, char i, char j);
 int sudoku_bactrack_assert(sudoku *sdk, char i, char j, char k)
 {
     DEBUG(DEBUG_BACKTRACK,"\n\tAssert [%d][%d][%d]",i,j,k);
-    if(k == SIZE_2) return 0;
     if(sdk->pos[i][j][k] == 0)
     {
         DEBUG(DEBUG_BACKTRACK,"\tNEXT");
@@ -358,10 +357,11 @@ int sudoku_bactrack_assert(sudoku *sdk, char i, char j, char k)
             return 0;
         }
         if(sdk->tot == 0) return 1;
+        if(sdk->tbl[i][j] != 0) return sudoku_backtrack(sdk,ADVANCE(i,j));
         return sudoku_bactrack_assert(sdk,i,j,k+1);
     }
 
-    DEBUG(DEBUG_BACKTRACK,"\tDONE");
+    DEBUG(DEBUG_BACKTRACK,"\tPOSSIBLE");
     if(sdktmp.tot != 0)
     if(!sudoku_backtrack(&sdktmp,ADVANCE(i,j)))
         return sudoku_bactrack_assert(sdk,i,j,k+1);
@@ -446,14 +446,10 @@ int main()
     if(INIT_FILE) fp = fopen(FILENAME,"w");
 
     sudoku sdk;
-
-    table_display(sdk.tbl);
+    sudoku_set_all_1(&sdk);
 
     NLINE;NLINE;NLINE;
-
-    sudoku_set_all_1(&sdk);
     table_display(sdk.tbl);
-    sudoku_display(sdk);
 
     NLINE;NLINE;NLINE;
 
