@@ -29,18 +29,22 @@ FILE *fp;
 #define OPEN do{
 #define CLOSE }while(0)
 
-#define DEFAULT "\033[0m"
-#define RED "\033[0;31m"
-#define YELLOW "\033[0;33m"
-#define BLUE "\033[0;34m"
-#define MAGENTA "\033[0;35m"
-#define CIANO "\033[0;36m"
+#define DEFAULT     "\033[0m"
+#define RED         "\033[0;31m"
+#define YELLOW      "\033[0;33m"
+#define BLUE        "\033[0;34m"
+#define MAGENTA     "\033[0;35m"
+#define CIANO       "\033[0;36m"
 #define COLOR(CODE) PRINT(CODE)
 #define PRINT_COLOR(CODE,ARGS...) OPEN COLOR(CODE); PRINT(ARGS); COLOR(DEFAULT); CLOSE
 
-#define DEBUGGING 0
+#define DEBUGGING 1
 #define DEBUG_COND(CODE) if((DEBUGGING == 2) || ((DEBUGGING == 1) && (CODE == 1)))
 #define DEBUG(CODE,ARGS...) DEBUG_COND(CODE) PRINT(ARGS)
+
+#define DEBUG_SET 0
+#define DEBUG_FOUND 0
+#define DEBUG_BACKTRACK 1
 
 typedef char  line[SIZE_2];
 typedef line  table[SIZE_2];
@@ -52,12 +56,25 @@ typedef table count[4];
 #define CNT_ACCESS_2(I,J,K) 2][J][K
 #define CNT_ACCESS_3(I,J,K) 3][MIX_HIGH(I,J)][K
 
+
+
 typedef struct Sudoku
 {
+    int   tot;
     table tbl;
-    poss    pos;
+    poss  pos;
     count cnt;
 } sudoku;
+
+void sudoku_init(sudoku *sdk)
+{
+    sdk->tot = SIZE_4;
+    memset(sdk->tbl,0,sizeof(table));
+    memset(sdk->pos,1,sizeof(poss));
+    memset(sdk->cnt,SIZE_2,sizeof(count));
+}
+
+
 
 void error(char *s)
 {
@@ -165,6 +182,7 @@ void count_display(count cnt)
 
 void sudoku_display(sudoku sdk)
 {
+    PRINT("\nUnknown: %d\n",sdk.tot);
     PRINT("\nPossibilities:");
     poss_display(sdk.pos);
     PRINT("\nCounts:");
@@ -199,14 +217,12 @@ void search_last_square(char *p, char index[2], char i0)
 
 
 
-#define DEBUG_SET 0
-#define DEBUG_FOUND 0
 
 int sudoku_position_set(sudoku *sdk, char i, char j, char k);
 
 int sudoku_position_clear(sudoku *sdk, char i, char j, char k)
 {
-    DEBUG(DEBUG_SET,"\n\tCLEAR [%d][%d][%d]",i,j,k);
+    DEBUG(DEBUG_SET,"\n\t\t\tCLEAR [%d][%d][%d]",i,j,k);
     REPORT if(sdk->pos[i][j][k] == 2) error("ATTEMPT TO CLEAR POSITION ALREADY SET");
 
     if(sdk->pos[i][j][k] == 0)
@@ -276,13 +292,12 @@ int sudoku_position_clear(sudoku *sdk, char i, char j, char k)
         }
     }
 
-
     return 1;
 }
 
 int sudoku_position_set(sudoku *sdk, char i, char j, char k)
 {
-    DEBUG(DEBUG_SET,"\nSET [%d][%d][%d]",i,j,k);
+    DEBUG(DEBUG_SET,"\n\t\tSET [%d][%d][%d]",i,j,k);
 
     REPORT if(sdk->tbl[i][j] != 0) error("ATTEMPT TO SET POSITION ALREADY SET");
 
@@ -297,7 +312,7 @@ int sudoku_position_set(sudoku *sdk, char i, char j, char k)
         if(!sudoku_position_clear(sdk,i,l,k)) return 0;
         if(!sudoku_position_clear(sdk,l,j,k)) return 0;
         if(!sudoku_position_clear(sdk,MIX_HIGH(i,l),MIX_LOW(j,l),k)) return 0;
-        DEBUG(DEBUG_SET,"\n\t---------");
+        DEBUG(DEBUG_SET,"\n\t\t\t---------");
     }
 
     sdk->pos[i][j][k] = 2;
@@ -309,13 +324,14 @@ int sudoku_position_set(sudoku *sdk, char i, char j, char k)
 
     sdk->tbl[i][j] = k+1;
 
-    DEBUG(DEBUG_SET,"\nEND [%d][%d][%d]",i,j,k);
+    (sdk->tot)--;
+
+    DEBUG(DEBUG_SET,"\n\t\tEND [%d][%d][%d]",i,j,k);
     return 1;
 }
 
 
 
-#define DEBUG_BACKTRACK 1
 
 #define ADVANCE(I,J) (I+(J+1)/SIZE_2),((J+1)%SIZE_2)
 
@@ -325,16 +341,28 @@ int sudoku_bactrack_assert(sudoku *sdk, char i, char j, char k)
 {
     DEBUG(DEBUG_BACKTRACK,"\n\tAssert [%d][%d][%d]",i,j,k);
     if(k == SIZE_2) return 0;
-    if(sdk->pos[i][j][k] == 0)  return sudoku_bactrack_assert(sdk,i,j,k+1);
+    if(sdk->pos[i][j][k] == 0)
+    {
+        DEBUG(DEBUG_BACKTRACK,"\tNEXT");
+        return sudoku_bactrack_assert(sdk,i,j,k+1);
+    }
 
     sudoku sdktmp;
     memcpy(&sdktmp,sdk,sizeof(sudoku));
     if(!sudoku_position_set(&sdktmp,i,j,k))
     {
-        if(!sudoku_position_clear(sdk,i,j,k))   return 0;
-        return sudoku_backtrack(sdk,ADVANCE(i,j));
+        DEBUG(DEBUG_BACKTRACK,"\tUNSETABLE");
+        if(!sudoku_position_clear(sdk,i,j,k))
+        {
+            DEBUG(DEBUG_BACKTRACK,"\tUNCLEARABLE");
+            return 0;
+        }
+        if(sdk->tot == 0) return 1;
+        return sudoku_bactrack_assert(sdk,i,j,k+1);
     }
 
+    DEBUG(DEBUG_BACKTRACK,"\tDONE");
+    if(sdktmp.tot != 0)
     if(!sudoku_backtrack(&sdktmp,ADVANCE(i,j)))
         return sudoku_bactrack_assert(sdk,i,j,k+1);
 
@@ -345,7 +373,6 @@ int sudoku_bactrack_assert(sudoku *sdk, char i, char j, char k)
 int sudoku_backtrack(sudoku *sdk, char i, char j)
 {
     DEBUG(DEBUG_BACKTRACK,"\nBacktrack [%d][%d]",i,j);
-    if(i == SIZE_2) return 1;
     if(sdk->tbl[i][j] != 0)  return sudoku_backtrack(sdk,ADVANCE(i,j));
 
     return sudoku_bactrack_assert(sdk,i,j,0);
@@ -355,6 +382,7 @@ int sudoku_backtrack(sudoku *sdk, char i, char j)
 
 void sudoku_set_all_0(sudoku *sdk)
 {
+    sudoku_init(sdk);
     if(!sudoku_position_set(sdk, 0, 0, 3)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
     if(!sudoku_position_set(sdk, 1, 5, 8)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
     if(!sudoku_position_set(sdk, 2, 6, 6)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
@@ -383,6 +411,7 @@ void sudoku_set_all_0(sudoku *sdk)
 
 void sudoku_set_all_1(sudoku *sdk)
 {
+    sudoku_init(sdk);
     if(!sudoku_position_set(sdk,0,2,0)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
     if(!sudoku_position_set(sdk,0,3,3)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
     if(!sudoku_position_set(sdk,0,4,6)) DEBUG(DEBUG_SET, "\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
@@ -417,9 +446,6 @@ int main()
     if(INIT_FILE) fp = fopen(FILENAME,"w");
 
     sudoku sdk;
-    memset(sdk.tbl,0,sizeof(table));
-    memset(sdk.pos,1,sizeof(poss));
-    memset(sdk.cnt,SIZE_2,sizeof(count));
 
     table_display(sdk.tbl);
 
@@ -427,6 +453,7 @@ int main()
 
     sudoku_set_all_1(&sdk);
     table_display(sdk.tbl);
+    sudoku_display(sdk);
 
     NLINE;NLINE;NLINE;
 
@@ -436,6 +463,5 @@ int main()
     COLOR(YELLOW);
     table_display(sdk.tbl);
     COLOR(DEFAULT);
-    sudoku_display(sdk);
     return 0;
 }
