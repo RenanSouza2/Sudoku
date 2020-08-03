@@ -19,12 +19,12 @@
 #define REPORTING 1
 #define REPORT if(REPORTING)
 
-#define DEBUGGING 1
+#define DEBUGGING 0
 #define DEBUG_COND(CODE) if((DEBUGGING == 2) || ((DEBUGGING == 1) && (CODE == 1)))
 #define DEBUG(CODE,ARGS...) DEBUG_COND(CODE) PRINT(ARGS)
 
 #define DEBUG_SEARCH    0
-#define DEBUG_SET       0
+#define DEBUG_SET       1
 #define DEBUG_BACKTRACK 1
 
 FILE *fp;
@@ -81,6 +81,8 @@ void sudoku_init(sudoku *sdk)
 }
 
 
+
+#define DEBUG_POSITION(I,J,K) if(i == I) if(j == J) if(k == K)
 
 void error(char *s)
 {
@@ -258,7 +260,7 @@ int sudoku_position_clear(sudoku *sdk, char i, char j, char k)
 {
     DEBUG(DEBUG_SET,"\n\t\t\tclear [%d][%d][%d]",i,j,k);
 
-    REPORT if(sdk->psb[i][j][k] == 2) error("ATTEMPT TO CLEAR POSITION ALREADY SET");
+    if(sdk->psb[i][j][k] == 2) return 0;
 
     if(sdk->psb[i][j][k] == 0)
     {
@@ -337,6 +339,8 @@ int sudoku_position_set(sudoku *sdk, char i, char j, char k)
     sdk->cnt[CNT_ACCESS_2(i,j,k)] = -1;
     sdk->cnt[CNT_ACCESS_3(i,j,k)] = -1;
 
+    REPORT if(sdk->tot == 0) error("INVALID TOTAL");
+
     (sdk->tot)--;
     sdk->tbl[i][j] = k+1;
 
@@ -369,6 +373,11 @@ Long tot;
 
 #define ADVANCE(I,J) (I+(J+1)/SIZE_2),((J+1)%SIZE_2)
 
+void done(sudoku sdk)
+{
+    tot++;
+}
+
 int sudoku_backtrack(sudoku *sdk, char i, char j);
 
 int sudoku_backtrack_assert(sudoku *sdk, char i, char j, char k)
@@ -376,29 +385,55 @@ int sudoku_backtrack_assert(sudoku *sdk, char i, char j, char k)
     DEBUG(DEBUG_BACKTRACK,"\n\tASSERT [%d][%d][%d]",i,j,k);
 
     if(sdk->psb[i][j][k] == 0)
-        return sudoku_backtrack_assert(sdk,i,j,k);
-
-    sudoku sdktmp;
-    memcpy(&sdktmp,sdk,sizeof(sudoku));
-    if(!sudoku_position_set(&sdktmp,i,j,k))
     {
-        if(!sudoku_position_clear(sdk,i,j,k))
-            return 0;
-
-        if(sdk->tot == 0)
-            return 1;
-
-        if(sdk->tbl[i][j] != 0)
-            return sudoku_backtrack(sdk,ADVANCE(i,j));
-
+        DEBUG(DEBUG_BACKTRACK,"\tNEXT");
         return sudoku_backtrack_assert(sdk,i,j,k+1);
     }
 
-    if(sdktmp.tot != 0)
-    if(!sudoku_backtrack(&sdktmp,ADVANCE(i,j)))
-        return 0;
+    sudoku sdktmp;
+    memcpy(&sdktmp,sdk,sizeof(sudoku));
+    if(sudoku_position_set(&sdktmp,i,j,k))
+    {
+        DEBUG(DEBUG_BACKTRACK,"\tASSERTED");
+        if(sdktmp.tot == 0)
+        {
+            DEBUG(DEBUG_BACKTRACK,"\tDONE 1");
+            done(*sdk);
+        }
+        else
+            sudoku_backtrack(&sdktmp,ADVANCE(i,j));
+    }
+    else
+        DEBUG(DEBUG_BACKTRACK,"\tIMPOSSIBLE");
 
-    memcpy(sdk,&sdktmp,sizeof(sudoku));
+    DEBUG(DEBUG_BACKTRACK,"\n\tREJECT [%d][%d][%d]",i,j,k);
+    memcpy(&sdktmp,sdk,sizeof(sudoku));
+    if(sudoku_position_clear(&sdktmp,i,j,k))
+    {
+        DEBUG(DEBUG_BACKTRACK,"\tREJECTED");
+        if(sdktmp.tot == 0)
+        {
+            DEBUG(DEBUG_BACKTRACK,"\tDONE 2");
+            done(*sdk);
+        }
+        else
+        {
+            if (sdktmp.tbl[i][j] != 0)
+            {
+                DEBUG(DEBUG_BACKTRACK, "\tOCUPIED");
+                sudoku_backtrack(&sdktmp, ADVANCE(i, j));
+            }
+            else
+            {
+                DEBUG(DEBUG_BACKTRACK, "\tEMPTY");
+                sudoku_backtrack_assert(&sdktmp,i,j,k+1);
+            }
+        }
+    }
+    else
+        DEBUG(DEBUG_BACKTRACK,"\tIMPOSSIBLE");
+
+    DEBUG(DEBUG_BACKTRACK,"\n\tOUT [%i][%j][%k]",i,j,k);
     return 1;
 }
 
@@ -414,32 +449,33 @@ int sudoku_backtrack(sudoku *sdk, char i, char j)
 
 
 
-void sudoku_init_0(sudoku *sdk)
+void sudoku_init_0(sudoku *sdk, int lim)
 {
+    int cnt = 0;
     sudoku_init(sdk);
-    if(!sudoku_position_set(sdk,0,0,3)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,1,5,8)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,2,6,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,2,7,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,2,8,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,3,2,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,3,4,3)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,3,5,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,3,7,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,4,2,0)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,4,3,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,5,2,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,5,4,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,6,0,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,6,1,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,6,6,8)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,6,8,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,7,0,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,7,5,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,7,7,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,7,8,1)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,8,2,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
-    if(!sudoku_position_set(sdk,8,3,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,0,0,3)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,1,5,8)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,2,6,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,2,7,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,2,8,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,3,2,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,3,4,3)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,3,5,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,3,7,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,4,2,0)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,4,3,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,5,2,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,5,4,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,6,0,7)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,6,1,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,6,6,8)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,6,8,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,7,0,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,7,5,4)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,7,7,5)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,7,8,1)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,8,2,2)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
+    if(cnt++ < lim) if(!sudoku_position_set(sdk,8,3,6)) DEBUG(DEBUG_SET,"\nOPORRA"); DEBUG_COND(DEBUG_SET) sudoku_display(*sdk);
 }
 
 void sudoku_init_1(sudoku *sdk)
@@ -505,20 +541,20 @@ void test()
 }
 
 
+
 int main()
 {
     init_otput();
 
     sudoku sdk;
-    sudoku_init_0(&sdk);
-
-    table_display(sdk.tbl);
-
-    PRINT("\nDEBUG INIT");
-    sudoku_backtrack(&sdk,0,0);
-
-    NLINE;
-    table_display(sdk.tbl);
+    for(int i=23; i>=0; i--)
+    {
+        PRINT("\nSet %d: ",i);
+        sudoku_init_0(&sdk,i);
+        tot = 0;
+        sudoku_backtrack(&sdk,0,0);
+        PRINT("\t%llu",tot);
+    }
 
     return 0;
 }
