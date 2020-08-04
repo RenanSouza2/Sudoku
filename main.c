@@ -19,12 +19,12 @@
 #define REPORTING 1
 #define REPORT if(REPORTING)
 
-#define DEBUGGING 0
+#define DEBUGGING 1
 #define DEBUG_COND(CODE) if((DEBUGGING == 2) || ((DEBUGGING == 1) && (CODE == 1)))
 #define DEBUG(CODE,ARGS...) DEBUG_COND(CODE) PRINT(ARGS)
 
 #define DEBUG_SEARCH    0
-#define DEBUG_SET       1
+#define DEBUG_SET       0
 #define DEBUG_BACKTRACK 1
 
 FILE *fp;
@@ -37,6 +37,7 @@ void init_otput()
 {
     fp = stdout;
     if(INIT_FILE) fp = fopen(FILENAME,"w");
+    setbuf(fp,NULL);
 }
 
 #define OPEN do{
@@ -368,15 +369,9 @@ int sudoku_position_set(sudoku *sdk, char i, char j, char k)
 
 
 typedef unsigned long long Long;
-Long tot;
 
 
 #define ADVANCE(I,J) (I+(J+1)/SIZE_2),((J+1)%SIZE_2)
-
-void done(sudoku sdk)
-{
-    tot++;
-}
 
 int sudoku_backtrack(sudoku *sdk, char i, char j);
 
@@ -392,49 +387,36 @@ int sudoku_backtrack_assert(sudoku *sdk, char i, char j, char k)
 
     sudoku sdktmp;
     memcpy(&sdktmp,sdk,sizeof(sudoku));
+    Long resset = 0;
     if(sudoku_position_set(&sdktmp,i,j,k))
     {
         DEBUG(DEBUG_BACKTRACK,"\tASSERTED");
         if(sdktmp.tot == 0)
-        {
-            DEBUG(DEBUG_BACKTRACK,"\tDONE 1");
-            done(*sdk);
-        }
+            resset = 1;
         else
-            sudoku_backtrack(&sdktmp,ADVANCE(i,j));
+            resset = sudoku_backtrack(&sdktmp, ADVANCE(i, j));
     }
     else
         DEBUG(DEBUG_BACKTRACK,"\tIMPOSSIBLE");
 
+    Long resclear = 0;
     DEBUG(DEBUG_BACKTRACK,"\n\tREJECT [%d][%d][%d]",i,j,k);
     memcpy(&sdktmp,sdk,sizeof(sudoku));
     if(sudoku_position_clear(&sdktmp,i,j,k))
     {
         DEBUG(DEBUG_BACKTRACK,"\tREJECTED");
         if(sdktmp.tot == 0)
-        {
-            DEBUG(DEBUG_BACKTRACK,"\tDONE 2");
-            done(*sdk);
-        }
+            resclear = 1;
+        else if (sdktmp.tbl[i][j] != 0)
+            resclear = sudoku_backtrack(&sdktmp, ADVANCE(i, j));
         else
-        {
-            if (sdktmp.tbl[i][j] != 0)
-            {
-                DEBUG(DEBUG_BACKTRACK, "\tOCUPIED");
-                sudoku_backtrack(&sdktmp, ADVANCE(i, j));
-            }
-            else
-            {
-                DEBUG(DEBUG_BACKTRACK, "\tEMPTY");
-                sudoku_backtrack_assert(&sdktmp,i,j,k+1);
-            }
-        }
+            resclear = sudoku_backtrack_assert(&sdktmp,i,j,k+1);
     }
     else
         DEBUG(DEBUG_BACKTRACK,"\tIMPOSSIBLE");
 
-    DEBUG(DEBUG_BACKTRACK,"\n\tOUT [%i][%j][%k]",i,j,k);
-    return 1;
+    DEBUG(DEBUG_BACKTRACK,"\n\tOUT [%d][%d][%d]",i,j,k);
+    return resset + resclear;
 }
 
 int sudoku_backtrack(sudoku *sdk, char i, char j)
@@ -547,12 +529,11 @@ int main()
     init_otput();
 
     sudoku sdk;
-    for(int i=23; i>=0; i--)
+    for(int i=23; i>=22; i--)
     {
         PRINT("\nSet %d: ",i);
         sudoku_init_0(&sdk,i);
-        tot = 0;
-        sudoku_backtrack(&sdk,0,0);
+        Long tot = sudoku_backtrack(&sdk,0,0);
         PRINT("\t%llu",tot);
     }
 
